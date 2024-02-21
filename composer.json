@@ -1,0 +1,13 @@
+{
+    "name": "blixem/third-party-migrations-bundle",
+    "type": "symfony-bundle",
+    "autoload": {
+        "psr-4": {
+            "Blixem\\ThirdPartyMigrations": "./"
+        }
+    },
+    "require": {
+        "doctrine/migrations": "^3.0",
+        "symfony/dependency-injection": "^5.0|^6.0|^7.0"
+    }
+}
