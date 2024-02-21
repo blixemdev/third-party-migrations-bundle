@@ -1,6 +1,6 @@
 # ThirdPartyMigrationsBundle
 
-ThirdPartyMigrationsBundle is a useful Symfony bundle that allows other Symfony bundles to register their own migrations.
+ThirdPartyMigrationsBundle enables third party Symfony bundles to easily register their own migrations.
 
 ## Installation
 
