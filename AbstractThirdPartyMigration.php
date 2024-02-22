@@ -4,49 +4,36 @@ declare(strict_types=1);
 
 namespace Blixem\ThirdPartyMigrations;
 
-use Composer\InstalledVersions;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\Migrations\AbstractMigration;
 
 /**
  * Base class for third party migrations.
  *
- * Using ordinary Doctrine migrations for third party packages is a bit of a hassle. This class
- * makes it easier, by allowing you to define to what version of the package the migration belongs.
- * When installing a package for the first time, all migrations from before the current version are
- * ignored, and only a base migration with version = NULL is executed. Migrations for subsequent
- * updates to the package are executed.
- *
- * The current verison of the database schema is stored in the `composer_package_schema_version` table.
- * The version is a normalized variant of the version of the composer package (e.g. 1.x-dev => 1.0.0).
- *
- * To execute migrations in the correct order, it is recommended to give an installation migration a
- * name like Version0000_Install, and subsequent migrations a name like Version0001_<package version>.
+ * To execute migrations in the correct order, it is recommended to give an
+ * installation migration a name like Version0000_Install, and increase the number
+ * for update migrations names, e.g. Version0001_<package version>.
  */
 abstract class AbstractThirdPartyMigration extends AbstractMigration
 {
 
     /**
-     * Composer package name.
+     * Name/identifier of the package this migration belongs to.
      */
-    abstract static protected function getComposerPackage(): string;
+    abstract static protected function getPackageName(): string;
 
     /**
-     * Composer package version this migration targets.
-     *
-     * NULL if its an installation/initial migration.
+     * Package schema version to which this migration updates the database.
      */
-    abstract static protected function getVersion(): ?string;
+    abstract static protected function getTargetVersion(): string;
 
     /**
-     * Returns the version of the package the schema returns to when reversing the migration.
+     * Returns the version the schema returns to when reversing the migration.
      *
-     * Returns NULL if no previous version is specified by the developer.
+     * NULL if this is an installation migration: reversing the installation migration
+     * removes all this package's tables from the database.
      */
-    static protected function getPreviousVersion(): ?string
-    {
-        return null;
-    }
+    abstract static protected function getPreviousVersion(): ?string;
 
     /**
      * Internal variable to skip the migration.
@@ -56,14 +43,14 @@ abstract class AbstractThirdPartyMigration extends AbstractMigration
     private bool $skip = false;
 
     /**
-     * Sets up the composer_package_schema_version table if it doesn't exist.
+     * Sets up the package_schema_version table if it doesn't exist.
      */
     private function setupVersionTable(): void
     {
-        $this->connection->executeQuery('CREATE TABLE IF NOT EXISTS `composer_package_schema_version` (
-            `composer_package` VARCHAR(100) NOT NULL,
+        $this->connection->executeQuery('CREATE TABLE IF NOT EXISTS `package_schema_version` (
+            `package` VARCHAR(100) NOT NULL,
             `version` VARCHAR(10) NOT NULL,
-            PRIMARY KEY (`composer_package`)) ENGINE = InnoDB
+            PRIMARY KEY (`package`)) ENGINE = InnoDB
         ');
     }
 
@@ -76,11 +63,11 @@ abstract class AbstractThirdPartyMigration extends AbstractMigration
     {
         $this->setupVersionTable();
 
-        $version = $this->connection->executeQuery('SELECT `version` FROM `composer_package_schema_version` WHERE composer_package = :package', [
-            'package' => $this->getComposerPackage()
+        $version = $this->connection->executeQuery('SELECT `version` FROM `package_schema_version` WHERE package = :package', [
+            'package' => $this->getPackageName()
         ])->fetchOne();
 
-        return $version === false ? null : self::normalizeVersion($version);
+        return $version === false ? null : $version;
     }
 
     /**
@@ -90,18 +77,18 @@ abstract class AbstractThirdPartyMigration extends AbstractMigration
     {
         $this->setupVersionTable();
 
-        $composer_package = $this->getComposerPackage();
+        $package = $this->getPackageName();
 
         // Delete existing row first, if it exists
-        $this->connection->executeQuery('DELETE FROM `composer_package_schema_version` WHERE composer_package = :composer_package', [
-            'composer_package' => $composer_package
+        $this->connection->executeQuery('DELETE FROM `package_schema_version` WHERE package = :package', [
+            'package' => $package
         ]);
 
         // Insert new row with updated version
         if ($version !== null)
         {
-            $this->connection->executeQuery('INSERT INTO `composer_package_schema_version` (composer_package, `version`) VALUES (:composer_package, :version)', [
-                'composer_package' => $composer_package,
+            $this->connection->executeQuery('INSERT INTO `package_schema_version` (package, `version`) VALUES (:package, :version)', [
+                'package' => $package,
                 'version' => $version
             ]);
         }
@@ -110,24 +97,10 @@ abstract class AbstractThirdPartyMigration extends AbstractMigration
     public function preUp(Schema $schema): void
     {
         $currentVersion = $this->getCurrentVersion();
+        $targetVersion = static::getTargetVersion();
 
-        // If static::getVersion() returns NULL, this is an initial migration or installation migration.
-        // It should only be run if no other migrations have been run for this package before, i.e.
-        // when $currentVersion is NULL.
-        $version = static::getVersion();
-        if ($version === null)
-        {
-            if ($currentVersion !== null)
-            {
-                $this->skip = true;
-            }
-
-            return;
-        }
-
-        // If this is not an initial migration, it should only be executed if the current version
-        // is less than the version of the migration.
-        if (version_compare($currentVersion, $version, '<'))
+        // A migration should only be executed if its target version is higher than the current schema version.
+        if ($currentVersion === null || version_compare($currentVersion, $targetVersion, '<'))
         {
             return;
         }
@@ -145,43 +118,17 @@ abstract class AbstractThirdPartyMigration extends AbstractMigration
         return [];
     }
 
-    protected static function getPackageVersion(): string
-    {
-        return self::normalizeVersion(InstalledVersions::getPrettyVersion(static::getComposerPackage()));
-    }
-
-    private static function normalizeVersion(string $version): string
-    {
-        // Remove -dev, -alpha, etc.
-        $version = explode('-', $version)[0];
-
-        return ltrim(str_replace('.x', '.99999', $version), 'v');
-    }
-
     public function postUp(Schema $schema): void
     {
         if (!$this->skip)
         {
-            $this->setCurrentVersion(static::getVersion() ?? self::getPackageVersion());
-        }
-    }
-
-    public function preDown(Schema $schema): void
-    {
-        // If this is not the installation migration and no previous migration was specified, the migration is irreversible,
-        // because we cannot update the version in the schema version table.
-        if (static::getVersion() !== null && static::getPreviousVersion() === null)
-        {
-            $this->throwIrreversibleMigrationException();
+            $this->setCurrentVersion(static::getTargetVersion());
         }
     }
 
     public function postDown(Schema $schema): void
     {
-        // If the migration was run, we need to update the version in the database.
-        $previousMigration = static::getPreviousVersion();
-        $version = $previousMigration === null ? null : $previousMigration::getVersion();
-        $this->setCurrentVersion($version);
+        $this->setCurrentVersion(static::getPreviousVersion());
     }
 
 }

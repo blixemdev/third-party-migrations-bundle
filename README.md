@@ -1,6 +1,23 @@
 # ThirdPartyMigrations
 
-ThirdPartyMigrations enables third party Composer packages to easily register their own migrations.
+ThirdPartyMigrations enables third party Composer packages to easily register
+their own migrations.
+
+Using ordinary Doctrine migrations for third party packages is a bit of a
+hassle. This package makes it easier, by allowing you to define which package
+the migration belongs to, and indicate a schema version number for every
+migration. ThirdPartyMigrations makes sure that only the right migrations are
+executed. The current schema versions for every package is stored in the
+`package_schema_version` table. Executing migrations up or down automatically
+modifies this table.
+
+You can define two types of migrations: installation migrations, containing the
+full schema for the latest version of the package, and update migrations,
+containing only the changes to the schema since the previous version.
+
+To execute migrations in the correct order, it is recommended to give an
+installation migration a name like Version0000_Install, and increase the number
+for update migrations names, e.g. Version0001_<package version>.
 
 ## Installation
 
@@ -9,7 +26,10 @@ $ composer require blixem/third-party-migrations
 ```
 
 ### Symfony
-ThirdPartyMigrations provides a Symfony bundle for easy integration into the Symfony framework. When using Symfony Flex, the ThirdPartyMigrationsBundle gets added to your bundle configuration automatically. Otherwise, add the following line to your `bundles.php`
+ThirdPartyMigrations provides a Symfony bundle for easy integration into the
+Symfony framework. When using Symfony Flex, the ThirdPartyMigrationsBundle gets
+added to your bundle configuration automatically. Otherwise, add the following
+line to your `bundles.php`
 
 ```php
     Blixem\ThirdPartyMigrations\ThirdPartyMigrationsBundle::class => ['all' => true],
@@ -24,14 +44,18 @@ namespace MyVendor\MyPackage;
 
 use Blixem\ThirdPartyMigrations\MigrationsProviderInterface;
 
+/**
+ * Service definitions of MigrationsProviderInterface are automatically
+ * picked up by the Symfony bundle
+ */
 class MyMigrationsProvider implements MigrationsProviderInterface {
 
-    public function getMigrationsPath(): string
+    public static function getMigrationsPath(): string
     {
         return __DIR__ .'/../migrations';
     }
 
-    public function getMigrationsNamespace(): string
+    public static function getMigrationsNamespace(): string
     {
         return 'MyVendor\\MyPackage\\Migrations';
     }
@@ -51,8 +75,9 @@ namespace MyVendor\MyPackage\Migrations;
 class Version0000_Install
 {
 
-    public function getComposerPackage(): string { return 'name/package'; }
-    public function getVersion(): ?string { return null; }
+    public function getPackageName(): string { return 'name/package'; }
+    public function getTargetVersion(): string { return '1.1.0'; /* the latest version */ }
+    public function getPreviousVersion(): ?string { return null; }
 
     public function up(): void
     {
@@ -73,14 +98,14 @@ class Version0000_Install
 namespace MyVendor\MyPackage\Migrations;
 
 /**
- * This migration updates the schema from version 1.0.1 to 1.1.0
+ * This migration updates the schema from version 1.0.0 to 1.1.0
  */
 class Version0001_1_1_0
 {
 
-    public function getComposerPackage(): string { return 'name/package'; }
-    public function getVersion(): ?string { return '1.1.0'; }
-    public function getPreviousVersion(): ?string { return '1.0.1'; }
+    public function getPackageName(): string { return 'name/package'; }
+    public function getTargetVersion(): ?string { return '1.1.0'; }
+    public function getPreviousVersion(): ?string { return '1.0.0'; }
 
     public function up(): void
     {
