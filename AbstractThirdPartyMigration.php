@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Blixem\ThirdPartyMigrationsBundle;
+namespace Blixem\ThirdPartyMigrations;
 
 use Composer\InstalledVersions;
 use Doctrine\DBAL\Schema\Schema;
@@ -62,7 +62,7 @@ abstract class AbstractThirdPartyMigration extends AbstractMigration
     {
         $this->connection->executeQuery('CREATE TABLE IF NOT EXISTS `composer_package_schema_version` (
             `composer_package` VARCHAR(100) NOT NULL,
-            `version` VARCHAR(10) NOT NULL
+            `version` VARCHAR(10) NOT NULL,
             PRIMARY KEY (`composer_package`)) ENGINE = InnoDB
         ');
     }
@@ -111,10 +111,10 @@ abstract class AbstractThirdPartyMigration extends AbstractMigration
     {
         $currentVersion = $this->getCurrentVersion();
 
-        // If self::getVersion() returns NULL, this is an initial migration or installation migration.
+        // If static::getVersion() returns NULL, this is an initial migration or installation migration.
         // It should only be run if no other migrations have been run for this package before, i.e.
         // when $currentVersion is NULL.
-        $version = self::getVersion();
+        $version = static::getVersion();
         if ($version === null)
         {
             if ($currentVersion !== null)
@@ -147,7 +147,7 @@ abstract class AbstractThirdPartyMigration extends AbstractMigration
 
     protected static function getPackageVersion(): string
     {
-        return self::normalizeVersion(InstalledVersions::getPrettyVersion(self::getComposerPackage()));
+        return self::normalizeVersion(InstalledVersions::getPrettyVersion(static::getComposerPackage()));
     }
 
     private static function normalizeVersion(string $version): string
@@ -162,7 +162,7 @@ abstract class AbstractThirdPartyMigration extends AbstractMigration
     {
         if (!$this->skip)
         {
-            $this->setCurrentVersion(self::getVersion() ?? static::getPackageVersion());
+            $this->setCurrentVersion(static::getVersion() ?? self::getPackageVersion());
         }
     }
 
@@ -170,7 +170,7 @@ abstract class AbstractThirdPartyMigration extends AbstractMigration
     {
         // If this is not the installation migration and no previous migration was specified, the migration is irreversible,
         // because we cannot update the version in the schema version table.
-        if (self::getVersion() !== null && self::getPreviousVersion() === null)
+        if (static::getVersion() !== null && static::getPreviousVersion() === null)
         {
             $this->throwIrreversibleMigrationException();
         }
@@ -179,7 +179,7 @@ abstract class AbstractThirdPartyMigration extends AbstractMigration
     public function postDown(Schema $schema): void
     {
         // If the migration was run, we need to update the version in the database.
-        $previousMigration = self::getPreviousVersion();
+        $previousMigration = static::getPreviousVersion();
         $version = $previousMigration === null ? null : $previousMigration::getVersion();
         $this->setCurrentVersion($version);
     }

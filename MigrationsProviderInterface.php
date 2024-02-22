@@ -1,21 +1,21 @@
 <?php
 
-namespace Blixem\ThirdPartyMigrationsBundle;
+namespace Blixem\ThirdPartyMigrations;
 
 /**
  * Interface that informs the migrations compiler pass that an extension defines Doctrine migrations.
  */
-interface MigrationsExtensionInterface
+interface MigrationsProviderInterface
 {
 
     /**
      * Returns the path to the directory containing the migrations.
      */
-    public function getMigrationsPath(): string;
+    public static function getMigrationsPath(): string;
 
     /**
      * Returns the namespace of the migrations.
      */
-    public function getMigrationsNamespace(): string;
+    public static function getMigrationsNamespace(): string;
 
 }

@@ -1,17 +1,48 @@
-# ThirdPartyMigrationsBundle
+# ThirdPartyMigrations
 
-ThirdPartyMigrationsBundle enables third party Symfony bundles to easily register their own migrations.
+ThirdPartyMigrations enables third party Composer packages to easily register their own migrations.
 
 ## Installation
 
 ```
-$ composer require blixem/third-party-migrations-bundle
+$ composer require blixem/third-party-migrations
+```
+
+### Symfony
+ThirdPartyMigrations provides a Symfony bundle for easy integration into the Symfony framework. When using Symfony Flex, the ThirdPartyMigrationsBundle gets added to your bundle configuration automatically. Otherwise, add the following line to your `bundles.php`
+
+```php
+    Blixem\ThirdPartyMigrations\ThirdPartyMigrationsBundle::class => ['all' => true],
 ```
 
 ## Usage
 
 ```php
 <?php
+
+namespace MyVendor\MyPackage;
+
+use Blixem\ThirdPartyMigrations\MigrationsProviderInterface;
+
+class MyMigrationsProvider implements MigrationsProviderInterface {
+
+    public function getMigrationsPath(): string
+    {
+        return __DIR__ .'/../migrations';
+    }
+
+    public function getMigrationsNamespace(): string
+    {
+        return 'MyVendor\\MyPackage\\Migrations';
+    }
+
+}
+```
+
+```php
+<?php
+
+namespace MyVendor\MyPackage\Migrations;
 
 /**
  * The installation migration sets up the database from scratch.
@@ -38,6 +69,8 @@ class Version0000_Install
 
 ```php
 <?php
+
+namespace MyVendor\MyPackage\Migrations;
 
 /**
  * This migration updates the schema from version 1.0.1 to 1.1.0
